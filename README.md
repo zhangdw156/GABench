@@ -142,7 +142,37 @@ uv run runners/run_benchmark.py --model gpt-4o --agent react --id 1,2,5
 **Debug Logs**:
 Debug mode results are saved in the `results/debug` directory, with filenames like `{model}_{agent}_{timestamp}.jsonl` (containing all task results from that run).
 
-### 3. Replay Tool Logic (Replay Logs)
+
+### 3. Parallel vLLM Evaluation (Server)
+
+`runners/run_benchmark.py` itself runs tasks sequentially and all tool outputs share one `output_dir`, so do not launch multiple benchmark runs in the same checkout. For vLLM/OpenAI-compatible endpoints, use the wrapper below; it shards task IDs across isolated worker copies, injects the model config into each worker, then merges JSONL results and tool outputs back into `results/` and `output_results/`.
+
+```bash
+uv sync
+uv run scripts/download_data.py
+
+scripts/run_parallel_vllm_eval.sh \
+  --model qwen3-4b-instruct-2507 \
+  --model-id qwen3-4b-instruct-2507 \
+  --base-url http://127.0.0.1:8000/v1 \
+  --api-key EMPTY \
+  --agent react \
+  --jobs 8
+```
+
+Useful companions:
+
+```bash
+# Progress / resume summary
+uv run python scripts/estimate_eval_progress.py --model qwen3-4b-instruct-2507 --agent react
+
+# Sync durable artifacts with the HF bucket
+hfsync/local_to_remote.sh --dry-run
+hfsync/local_to_remote.sh --artifact results,output_results --new-only
+hfsync/remote_to_local.sh --artifact results --dry-run
+```
+
+### 4. Replay Tool Logic (Replay Logs)
 
 If you already have a run log file (`.jsonl`) and want to **re-execute only the tool call logic** recorded in the log without going through the LLM (e.g., to reproduce tool errors, regenerate output files, etc.), use the `runners/replay_logs.py` script.
 
@@ -382,7 +412,37 @@ uv run runners/run_benchmark.py --model gpt-4o --agent react --id 1,2,5
 **调试日志**:
 调试模式的运行结果会保存在 `results/debug` 目录下，文件名为 `{model}_{agent}_{timestamp}.jsonl`（包含该次运行的所有任务结果）。
 
-### 3. 重新执行工具逻辑 (Replay Logs)
+
+### 3. 服务器并发 vLLM 评测
+
+`runners/run_benchmark.py` 本身是逐任务串行执行，而且工具输出共享同一个 `output_dir`，所以不要在同一个 checkout 里直接启动多个完整评测进程。评测 vLLM/OpenAI 兼容接口时，推荐使用下面的包装脚本：它会把任务 ID 分片到隔离 worker 副本里运行，把模型配置注入每个 worker，最后把 JSONL 和工具输出合并回 `results/` 与 `output_results/`。
+
+```bash
+uv sync
+uv run scripts/download_data.py
+
+scripts/run_parallel_vllm_eval.sh \
+  --model qwen3-4b-instruct-2507 \
+  --model-id qwen3-4b-instruct-2507 \
+  --base-url http://127.0.0.1:8000/v1 \
+  --api-key EMPTY \
+  --agent react \
+  --jobs 8
+```
+
+配套命令：
+
+```bash
+# 查看进度 / 断点续跑摘要
+uv run python scripts/estimate_eval_progress.py --model qwen3-4b-instruct-2507 --agent react
+
+# 与 HF bucket 同步持久化产物
+hfsync/local_to_remote.sh --dry-run
+hfsync/local_to_remote.sh --artifact results,output_results --new-only
+hfsync/remote_to_local.sh --artifact results --dry-run
+```
+
+### 4. 重新执行工具逻辑 (Replay Logs)
 
 如果你已经有了一次运行的日志文件（`.jsonl`），并且希望**不经过 LLM**，仅重新执行日志中记录的工具调用逻辑（例如为了复现工具报错、重新生成输出文件等），可以使用 `runners/replay_logs.py` 脚本。
 

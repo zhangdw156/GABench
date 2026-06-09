@@ -8,3 +8,5 @@ results/
 *.pyc
 __pycache__/
 toolbox/__pycache__/
+.venv/
+.parallel_eval/
