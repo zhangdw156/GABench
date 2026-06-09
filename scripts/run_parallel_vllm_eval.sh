@@ -15,10 +15,9 @@ Usage:
   scripts/run_parallel_vllm_eval.sh [options]
 
 Common options:
-  --model MODEL_KEY          Model key passed to runners/run_benchmark.py.
+  --model MODEL              Model name used for the GABench config key,
+                             result directories, and vLLM/OpenAI endpoint.
                              Default: MODEL or qwen3-4b-instruct-2507.
-  --model-id MODEL_ID        Model id sent to the vLLM/OpenAI endpoint.
-                             Default: MODEL_ID or MODEL_KEY.
   --base-url URL             Endpoint base URL. Default: BASE_URL,
                              OPENAI_BASE_URL, or http://127.0.0.1:8000/v1.
   --api-key KEY              API key. Default: API_KEY, OPENAI_API_KEY, or EMPTY.
@@ -47,8 +46,7 @@ Examples:
 USAGE
 }
 
-MODEL_KEY="${MODEL:-qwen3-4b-instruct-2507}"
-MODEL_ID="${MODEL_ID:-}"
+MODEL_NAME="${MODEL:-qwen3-4b-instruct-2507}"
 BASE_URL_VALUE="${BASE_URL:-${OPENAI_BASE_URL:-http://127.0.0.1:8000/v1}}"
 API_KEY_VALUE="${API_KEY:-${OPENAI_API_KEY:-EMPTY}}"
 AGENT="${AGENT:-react}"
@@ -63,12 +61,8 @@ DRY_RUN=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --model|--model-key)
-      MODEL_KEY="${2:?missing value for $1}"
-      shift 2
-      ;;
-    --model-id)
-      MODEL_ID="${2:?missing value for --model-id}"
+    --model)
+      MODEL_NAME="${2:?missing value for $1}"
       shift 2
       ;;
     --base-url)
@@ -126,8 +120,6 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
-
-MODEL_ID="${MODEL_ID:-$MODEL_KEY}"
 
 case "$AGENT" in
   react|plan_and_react|plan_and_solve|base) ;;
@@ -239,13 +231,12 @@ if [[ ! -s "$SHARDS_FILE" ]]; then
   exit 2
 fi
 
-model_safe="${MODEL_KEY//\//_}"
+model_safe="${MODEL_NAME//\//_}"
 model_safe="${model_safe//\\/_}"
 
 print_plan() {
   echo "==> GABench parallel vLLM evaluation"
-  echo "Model key:   $MODEL_KEY"
-  echo "Model id:    $MODEL_ID"
+  echo "Model:       $MODEL_NAME"
   echo "Base URL:    $BASE_URL_VALUE"
   echo "Agent:       $AGENT"
   echo "Jobs:        $JOBS"
@@ -260,7 +251,7 @@ print_plan() {
 
 configure_worker() {
   local worker_dir="$1"
-  uv run --project "$REPO_ROOT" python - "$worker_dir/config.yaml" "$MODEL_KEY" "$MODEL_ID" "$BASE_URL_VALUE" "$API_KEY_VALUE" "$MAX_TOKENS" <<'PYCONF'
+  uv run --project "$REPO_ROOT" python - "$worker_dir/config.yaml" "$MODEL_NAME" "$BASE_URL_VALUE" "$API_KEY_VALUE" "$MAX_TOKENS" <<'PYCONF'
 from __future__ import annotations
 
 import sys
@@ -269,17 +260,16 @@ from pathlib import Path
 import yaml
 
 config_path = Path(sys.argv[1])
-model_key = sys.argv[2]
-model_id = sys.argv[3]
-base_url = sys.argv[4]
-api_key = sys.argv[5]
-max_tokens = sys.argv[6]
+model_name = sys.argv[2]
+base_url = sys.argv[3]
+api_key = sys.argv[4]
+max_tokens = sys.argv[5]
 
 with config_path.open("r", encoding="utf-8") as f:
     cfg = yaml.safe_load(f) or {}
 
-cfg.setdefault("llm", {})[model_key] = {
-    "model": model_id,
+cfg.setdefault("llm", {})[model_name] = {
+    "model": model_name,
     "base_url": base_url,
     "api_key": api_key,
 }
@@ -333,7 +323,7 @@ run_worker() {
   (
     cd "$worker_dir"
     uv run --project "$REPO_ROOT" python runners/run_benchmark.py \
-      --model "$MODEL_KEY" \
+      --model "$MODEL_NAME" \
       --agent "$AGENT" \
       --id "$ids"
   ) > "$log_file" 2>&1
@@ -371,7 +361,7 @@ if [[ "$failed" -ne 0 ]]; then
   exit 1
 fi
 
-merged_dir="$REPO_ROOT/results/$MODEL_KEY/$AGENT"
+merged_dir="$REPO_ROOT/results/$MODEL_NAME/$AGENT"
 merged_result="$merged_dir/$RUN_ID.jsonl"
 mkdir -p "$merged_dir"
 : > "$merged_result"
@@ -390,7 +380,7 @@ while IFS=$'\t' read -r worker_idx _ids; do
 
 done < "$SHARDS_FILE"
 
-output_dest="$REPO_ROOT/output_results/$MODEL_KEY/$AGENT/output"
+output_dest="$REPO_ROOT/output_results/$MODEL_NAME/$AGENT/output"
 mkdir -p "$output_dest"
 while IFS=$'\t' read -r worker_idx _ids; do
   worker_output="$WORKSPACE/w${worker_idx}/output"

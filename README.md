@@ -153,7 +153,6 @@ uv run scripts/download_data.py
 
 scripts/run_parallel_vllm_eval.sh \
   --model qwen3-4b-instruct-2507 \
-  --model-id qwen3-4b-instruct-2507 \
   --base-url http://127.0.0.1:8000/v1 \
   --api-key EMPTY \
   --agent react \
@@ -423,7 +422,6 @@ uv run scripts/download_data.py
 
 scripts/run_parallel_vllm_eval.sh \
   --model qwen3-4b-instruct-2507 \
-  --model-id qwen3-4b-instruct-2507 \
   --base-url http://127.0.0.1:8000/v1 \
   --api-key EMPTY \
   --agent react \
